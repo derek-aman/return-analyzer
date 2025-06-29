@@ -10,8 +10,9 @@ app.use(cors());
 app.use(express.json());
 
 mongoose.connect(process.env.MONGODB_URI)
-    .then(() => console.log('MongoDB Connected'))
-    .catch(err => console.log(err));
+  .then(() => console.log("✅ DB Connected"))
+  .catch((err) => console.error("❌ DB Error", err));
+
 
 app.use('/api/analyze', analyzeRoute);
 
