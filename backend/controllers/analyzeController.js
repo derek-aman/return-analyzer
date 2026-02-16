@@ -1,110 +1,114 @@
-const { GoogleGenerativeAI } = require('@google/generative-ai');
-const ReturnReason = require('../models/ReturnReason');
-require('dotenv').config();
+const ReturnReason = require("../models/ReturnReason");
+const classifyReasonWithAI = require("../ai/classifyReason");
+const generateSellerSummary = require("../ai/sellerSummary");
+const generateProductRecommendation = require("../ai/productRecommendation");
 
-// AI classification prompt logic
-const classifyReasonWithAI = async (reasonText) => {
-  const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-
-  const prompt = `
-    You are an AI assistant that classifies customer return reasons into one of:
-    'Damaged', 'Wrong Size', 'Late Delivery', 'Changed Mind', or 'Other'.
-
-    Classify this reason:
-    "${reasonText}"
-
-    Respond ONLY with one of the categories.
-  `;
-
-  const result = await model.generateContent(prompt);
-  return result.response.text().trim();
-};
-
-// ✅ CREATE
+// CREATE + classify
 exports.analyzeReason = async (req, res) => {
   const { userId, productId, sellerId, reasonText } = req.body;
-
   try {
     const aiPrediction = await classifyReasonWithAI(reasonText);
-
-    const newEntry = new ReturnReason({
-      userId,
-      productId,
-      sellerId,
-      reasonText,
-      aiPrediction
+    const newEntry = await ReturnReason.create({
+      userId, productId, sellerId, reasonText, aiPrediction
     });
-
-    await newEntry.save();
     res.status(200).json(newEntry);
   } catch (err) {
-    console.error("❌ AI Error:", err);
-    res.status(500).json({ error: "Gemini AI prediction failed" });
+    console.error("AI/Create Error:", err);
+    res.status(500).json({ error: "Prediction failed" });
   }
 };
 
-// ✅ READ ALL BY SELLER
+// READ ALL by seller
 exports.getReturnsBySeller = async (req, res) => {
   try {
-    const { sellerId } = req.params;
-    const returns = await ReturnReason.find({ sellerId }).sort({ timestamp: -1 });
+    const returns = await ReturnReason.find({ sellerId: req.params.sellerId })
+      .sort({ timestamp: -1 });
     res.status(200).json(returns);
   } catch (err) {
-    console.error("❌ DB Fetch Error:", err);
-    res.status(500).json({ error: "Failed to fetch return reasons by seller" });
+    console.error("Fetch Error:", err);
+    res.status(500).json({ error: "Failed to fetch by seller" });
   }
 };
 
-// ✅ READ ONE
+// READ ONE
 exports.getReturnById = async (req, res) => {
   try {
-    const returnItem = await ReturnReason.findById(req.params.id);
-    if (!returnItem) return res.status(404).json({ error: "Return not found" });
-    res.status(200).json(returnItem);
-  } catch (err) {
-    res.status(500).json({ error: "Failed to get return by ID" });
+    const ret = await ReturnReason.findById(req.params.id);
+    if (!ret) return res.status(404).json({ error: "Return not found" });
+    res.status(200).json(ret);
+  } catch {
+    res.status(500).json({ error: "Failed to get by ID" });
   }
 };
 
-// ✅ UPDATE (with AI reclassification if reasonText is updated)
+// UPDATE (reclassify if reasonText provided)
 exports.updateReturn = async (req, res) => {
   try {
-    const { reasonText } = req.body;
-    let aiPrediction;
-
-    if (reasonText) {
-      aiPrediction = await classifyReasonWithAI(reasonText);
+    let updatePayload = { ...req.body };
+    if (req.body.reasonText) {
+      updatePayload.aiPrediction = await classifyReasonWithAI(req.body.reasonText);
     }
-
-    const updatePayload = {
-      ...req.body,
-      ...(aiPrediction && { aiPrediction })
-    };
-
     const updated = await ReturnReason.findByIdAndUpdate(
-      req.params.id,
-      updatePayload,
-      { new: true }
+      req.params.id, updatePayload, { new: true }
     );
-
     if (!updated) return res.status(404).json({ error: "Return not found" });
-
     res.status(200).json(updated);
   } catch (err) {
-    console.error("❌ Update Error:", err);
+    console.error("Update Error:", err);
     res.status(500).json({ error: "Update failed" });
   }
 };
 
-// ✅ DELETE
+// DELETE
 exports.deleteReturn = async (req, res) => {
   try {
     const deleted = await ReturnReason.findByIdAndDelete(req.params.id);
     if (!deleted) return res.status(404).json({ error: "Return not found" });
-
-    res.status(200).json({ message: "Deleted successfully" });
-  } catch (err) {
+    res.status(200).json({ message: "Deleted" });
+  } catch {
     res.status(500).json({ error: "Delete failed" });
   }
+};
+
+// AI summary for seller
+exports.analyzeSellerReturns = async (req, res) => {
+  try {
+    const returns = await ReturnReason.find({ sellerId: req.params.sellerId });
+    if (!returns.length) return res.status(404).json({ message: "No returns for this seller." });
+
+    const formatted = returns
+      .map((r, i) => `${i + 1}. ${r.reasonText} → (${r.aiPrediction})`).join("\n");
+
+    const aiSummary = await generateSellerSummary(formatted);
+    res.status(200).json({ summary: aiSummary });
+  } catch (err) {
+    console.error("Summary Error:", err);
+    res.status(500).json({ error: "Summary failed" });
+  }
+};
+
+// Product recommendation via AI
+exports.smartRecommendation = async (req, res) => {
+  try {
+    const returns = await ReturnReason.find({ productId: req.params.productId });
+    if (!returns.length) return res.status(404).json({ message: "No returns for this product." });
+
+    const list = returns.map(r => `- ${r.reasonText} → (${r.aiPrediction})`).join("\n");
+    const recommendation = await generateProductRecommendation(req.params.productId, list);
+    res.status(200).json({ recommendation });
+  } catch (err) {
+    console.error("Recommendation Error:", err);
+    res.status(500).json({ error: "Recommendation failed" });
+  }
+};
+
+// Utilities for quick testing
+exports.clearAll = async (_req, res) => {
+  await ReturnReason.deleteMany({});
+  res.json({ message: "All cleared" });
+};
+
+exports.listAll = async (_req, res) => {
+  const all = await ReturnReason.find().sort({ timestamp: -1 });
+  res.json(all);
 };
