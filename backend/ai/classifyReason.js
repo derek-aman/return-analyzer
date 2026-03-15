@@ -15,7 +15,7 @@ const classifyReasonWithAI = async (reasonText) => {
   if (!process.env.GEMINI_API_KEY) return fallbackClassify(reasonText);
 
   const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
   const prompt = `
 You are an AI assistant that classifies customer return reasons into one of:

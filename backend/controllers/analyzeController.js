@@ -71,16 +71,32 @@ exports.deleteReturn = async (req, res) => {
 };
 
 // AI summary for seller
+// AI summary for seller
 exports.analyzeSellerReturns = async (req, res) => {
   try {
     const returns = await ReturnReason.find({ sellerId: req.params.sellerId });
     if (!returns.length) return res.status(404).json({ message: "No returns for this seller." });
 
+    // ✅ Calculate percentages from aiPrediction
+    const total = returns.length;
+    const counts = {};
+    returns.forEach(r => {
+      const category = r.aiPrediction || "Unknown";
+      counts[category] = (counts[category] || 0) + 1;
+    });
+
+    const percentages = {};
+    Object.entries(counts).forEach(([key, count]) => {
+      percentages[key] = parseFloat(((count / total) * 100).toFixed(2));
+    });
+
     const formatted = returns
       .map((r, i) => `${i + 1}. ${r.reasonText} → (${r.aiPrediction})`).join("\n");
 
     const aiSummary = await generateSellerSummary(formatted);
-    res.status(200).json({ summary: aiSummary });
+
+    // ✅ Return both summary AND percentages
+    res.status(200).json({ summary: aiSummary, percentages });
   } catch (err) {
     console.error("Summary Error:", err);
     res.status(500).json({ error: "Summary failed" });
