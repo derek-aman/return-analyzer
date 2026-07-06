@@ -10,7 +10,7 @@ export default function ReasonForm({ onResult }) {
     if (!reason.trim()) return;
     setLoading(true);
     try {
-      const { data } = await axios.post("http://localhost:5000/api/analyze/analyze", {
+      const { data } = await axios.post("https://return-analyzer.onrender.com/api/analyze/analyze", {
         userId: "user1", productId: "prod1",
         sellerId: "seller1", reasonText: reason,
       });
