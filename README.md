@@ -48,21 +48,21 @@ Return Reason Analyzer ingests merchant return data (single entries or bulk CSV 
 
 ```bash
 # Clone the repo
-git clone https://github.com/derek-aman/<repo-name>.git
-cd <repo-name>
+git clone https://github.com/derek-aman/return-analyzer.git
+cd return-analyze
 
 # Install backend dependencies
-cd server
+cd backend
 npm install
 
 # Install frontend dependencies
-cd ../client
+cd ../frontend
 npm install
 ```
 
 ### Environment Variables
 
-Create a `.env` file in the `server` directory:
+Create a `.env` file in the `backend` directory:
 
 ```env
 MONGO_URI=your_mongodb_connection_string
@@ -78,20 +78,14 @@ PORT=5000
 redis-server
 
 # Start backend
-cd server
-npm run dev
+cd backend
+node server.js
 
 # Start frontend
-cd client
+cd frontend
 npm run dev
 ```
 
-## Roadmap
 
-- [ ] Export classified results as CSV/Excel
-- [ ] Dashboard with category-wise return trends
-- [ ] Support for additional file formats (XLSX, JSON)
 
-## License
 
-MIT
